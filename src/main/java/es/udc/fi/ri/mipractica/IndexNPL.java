@@ -7,6 +7,10 @@ import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.similarities.ClassicSimilarity;
+import org.apache.lucene.search.similarities.LMDirichletSimilarity;
+import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
+import org.apache.lucene.search.similarities.TFIDFSimilarity;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
@@ -79,28 +83,12 @@ public class IndexNPL {
         }
 
         //Read and store doc path
-//        String mode = prop.getProperty("indexingmodel");
-//        if (docsList != null) {
-//            String[] docsSplit = docsList.split(" ");
-//            docPath = Paths.get(docsSplit[0]);
-//
-//        } else {
-//            System.out.println("Error in the config file, there is no doc path");
-//            System.exit(-1);
-//        }
-    }
-
-    public static final FieldType TYPE_STORED = new FieldType();
-
-    static final IndexOptions options = IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
-
-    static {
-        TYPE_STORED.setIndexOptions(options);
-        TYPE_STORED.setTokenized(true);
-        TYPE_STORED.setStored(true);
-        TYPE_STORED.setStoreTermVectors(true);
-        TYPE_STORED.setStoreTermVectorPositions(true);
-        TYPE_STORED.freeze();
+        String im = prop.getProperty("indexingmodel");
+        if (im.equals("jm lambda") || im.equals("dir mu") || im.equals("tfidf")) {
+            indexingmodel = im;
+        } else {
+            System.out.println("Error reading Indexing Model, defaulting to jm lambda");
+        }
     }
 
     static void indexDoc(IndexWriter writer, Path file) throws IOException {
@@ -109,7 +97,6 @@ public class IndexNPL {
             String line;
             BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
             while ((line = br.readLine()) != null){
-                System.out.println(line);
                 int num;
                 try {
                     num = Integer.parseInt(line);
@@ -129,14 +116,12 @@ public class IndexNPL {
 
                     if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
                         writer.addDocument(doc);
-                        System.out.println("doc escrito");
                     } else {
                         writer.updateDocument(new Term("path", file.toString()), doc);
                     }
                 }
                 catch (NumberFormatException e)
                 {
-                    System.out.println("no habia numero jaja");
                 }
             }
         }
@@ -163,6 +148,12 @@ public class IndexNPL {
             IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
 
             iwc.setOpenMode(openmode);
+
+            switch (indexingmodel){
+                case "jm lambda": iwc.setSimilarity(new LMJelinekMercerSimilarity(0.5f));
+                case "dir mu": iwc.setSimilarity(new LMDirichletSimilarity(0.5f));
+                case "tfidf": iwc.setSimilarity(new ClassicSimilarity());
+            }
 
             IndexWriter writer = new IndexWriter(dir, iwc);
 
