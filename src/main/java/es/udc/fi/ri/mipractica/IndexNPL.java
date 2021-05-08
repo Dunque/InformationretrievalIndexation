@@ -23,42 +23,12 @@ import java.util.concurrent.TimeUnit;
 
 public class IndexNPL {
 
-    private static class WorkerThread extends Thread {
-
-        private final List<Path> folders;
-        private IndexWriter writer;
-
-        //Used in IndexNonPartial
-        public WorkerThread(final List<Path> folders, IndexWriter writer) {
-            this.folders = folders;
-            this.writer = writer;
-        }
-
-        @Override
-        public void run() {
-            String ThreadName = Thread.currentThread().getName();
-
-            for (Path path : folders) {
-
-                System.out.println(String.format("I am the thread '%s' and I am responsible for folder '%s'",
-                        Thread.currentThread().getName(), path));
-                try {
-                    System.out.println(ThreadName + ": Indexing to directory '" + path + "'...");
-                    indexDocs(writer, path);
-                } catch (IOException e) {
-                    System.out.println(ThreadName + ": caught a " + e.getClass() + "with message: " + e.getMessage());
-                }
-            }
-        }
-
-    }
-
     static final String DEFAULT_PATH = "src/main/resources/config.properties";
 
     static String indexPath = "index"; //default index path is a folder named index located in the root dir
-    static List<Path> docsPath = new ArrayList<>();
+    static Path docPath;
+    static String indexingmodel = "jm lambda";
     static IndexWriterConfig.OpenMode openmode = IndexWriterConfig.OpenMode.CREATE_OR_APPEND;
-    static int numThreads = Runtime.getRuntime().availableProcessors();
 
     private IndexNPL() {
     }
@@ -66,8 +36,7 @@ public class IndexNPL {
     private static void parseArguments(String[] args) {
 
         String usage = "java -jar IndexNPL-0.0.1-SNAPSHOT-jar-with-dependencies"
-                + " [-index INDEX_PATH] [-openmode <APPEND | CREATE | APPEND_OR_CREATE>]"
-                + " [-numThreads NUM_THREADS]\n";
+                + " [-index INDEX_PATH] [-openmode <APPEND | CREATE | APPEND_OR_CREATE>]\n";
 
         if (args.length < 1)
             System.out.println(usage);
@@ -79,10 +48,6 @@ public class IndexNPL {
                 i++;
             } else if ("-openmode".equals(args[i])) {
                 openmode = IndexWriterConfig.OpenMode.valueOf(args[i + 1]);
-                System.out.println(args[i] + args[i + 1]);
-                i++;
-            } else if ("-numThreads".equals(args[i])) {
-                numThreads = Integer.parseInt(args[i + 1]);
                 System.out.println(args[i] + args[i + 1]);
                 i++;
             }
@@ -102,36 +67,27 @@ public class IndexNPL {
             System.exit(-1);
         }
 
-        //Read and store docs paths
+        //Read and store doc path
         String docsList = prop.getProperty("docs");
         if (docsList != null) {
             String[] docsSplit = docsList.split(" ");
-            for (int i = 0; i < docsSplit.length; i++) {
-                Path doc = Paths.get(docsSplit[i]);
-                docsPath.add(doc);
-            }
+            docPath = Paths.get(docsSplit[0]);
+
         } else {
-            System.out.println("Error in the config file, there are no docs paths");
+            System.out.println("Error in the config file, there is no doc path");
             System.exit(-1);
         }
-    }
 
-    static void indexDocs(final IndexWriter writer, Path path) throws IOException {
-        if (Files.isDirectory(path)) {
-            Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    try {
-                        indexDoc(writer, file);
-                    } catch (IOException ignore) {
-                        // don't index files that can't be read.
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } else {
-            indexDoc(writer, path);
-        }
+        //Read and store doc path
+//        String mode = prop.getProperty("indexingmodel");
+//        if (docsList != null) {
+//            String[] docsSplit = docsList.split(" ");
+//            docPath = Paths.get(docsSplit[0]);
+//
+//        } else {
+//            System.out.println("Error in the config file, there is no doc path");
+//            System.exit(-1);
+//        }
     }
 
     public static final FieldType TYPE_STORED = new FieldType();
@@ -150,78 +106,41 @@ public class IndexNPL {
     static void indexDoc(IndexWriter writer, Path file) throws IOException {
 
         try (InputStream stream = Files.newInputStream(file)) {
+            String line;
+            BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            while ((line = br.readLine()) != null){
+                System.out.println(line);
+                int num;
+                try {
+                    num = Integer.parseInt(line);
+                    String contents = "";
+                    Document doc = new Document();
 
-            Document doc = new Document();
+                    String line2;
+                    while((line2 = br.readLine()) != null){
+                        if (line2 == null || line2.trim().equals("/"))
+                            break;
+                        contents += line2 + "\n";
+                    }
 
-            Field pathField = new StringField("path", file.toString(), Field.Store.YES);
-            doc.add(pathField);
+                    doc.add(new StringField("DocIDNPL", String.valueOf(num), Field.Store.YES));
 
-            doc.add(new TextField("contents",
-                    new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))));
+                    doc.add(new StringField("contents", contents, Field.Store.YES));
 
-            doc.add(new StringField("hostname", InetAddress.getLocalHost().getHostName(), Field.Store.YES));
-            doc.add(new StringField("thread", Thread.currentThread().getName(), Field.Store.YES));
-            doc.add(new DoublePoint("sizeKb", (double) Files.size(file)));
-            //doc.add(new StoredField("sizeKb", (double) Files.size(file), ));
-
-            BasicFileAttributeView basicView = Files.getFileAttributeView(file, BasicFileAttributeView.class);
-
-            String creationTime = basicView.readAttributes().creationTime().toString();
-            String lastAccessTime = basicView.readAttributes().lastAccessTime().toString();
-            String lastModifiedTime = basicView.readAttributes().lastModifiedTime().toString();
-            doc.add(new StringField("creationTime", creationTime, Field.Store.YES));
-            doc.add(new StringField("lastAccessTime", lastAccessTime, Field.Store.YES));
-            doc.add(new StringField("lastModifiedTime", lastModifiedTime, Field.Store.YES));
-
-            String creationTimeLucene = DateTools.dateToString(new Date(basicView.readAttributes().creationTime().toMillis()), DateTools.Resolution.MINUTE);
-            String lastAccessTimeLucene = DateTools.dateToString(new Date(basicView.readAttributes().lastAccessTime().toMillis()), DateTools.Resolution.MINUTE);
-            String lastModifiedTimeLucene = DateTools.dateToString(new Date(basicView.readAttributes().lastModifiedTime().toMillis()), DateTools.Resolution.MINUTE);
-            doc.add(new StringField("creationTimeLucene", creationTimeLucene, Field.Store.YES));
-            doc.add(new StringField("lastAccessTimeLucene", lastAccessTimeLucene, Field.Store.YES));
-            doc.add(new StringField("lastModifiedTimeLucene", lastModifiedTimeLucene, Field.Store.YES));
-
-            if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
-                System.out.println(Thread.currentThread().getName() + " adding " + file);
-                writer.addDocument(doc);
-            } else {
-                System.out.println(Thread.currentThread().getName() + " updating " + file);
-                writer.updateDocument(new Term("path", file.toString()), doc);
-            }
-        }
-
-    }
-
-    public static void indexNonPartial(IndexWriter writer) {
-        final ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-
-        List<Path> docsPathAux = new ArrayList<>(docsPath);
-        ArrayList<Path>[] al = new ArrayList[numThreads];
-        for (int i = 0; i < numThreads; i++) {
-            al[i] = new ArrayList<>();
-        }
-
-        while (!docsPathAux.isEmpty()) {
-            for (int i = 0; i < numThreads; i++) {
-                if (docsPathAux.size() > 0 && docsPathAux.get(0) != null) {
-                    al[i].add(docsPathAux.get(0));
-                    docsPathAux.remove(0);
+                    if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
+                        writer.addDocument(doc);
+                        System.out.println("doc escrito");
+                    } else {
+                        writer.updateDocument(new Term("path", file.toString()), doc);
+                    }
+                }
+                catch (NumberFormatException e)
+                {
+                    System.out.println("no habia numero jaja");
                 }
             }
         }
 
-        for (int i = 0; i < numThreads; i++) {
-            final Runnable worker = new WorkerThread(al[i], writer);
-            executor.execute(worker);
-        }
-
-        executor.shutdown();
-        /* Wait up to 1 hour to finish all the previously submitted jobs */
-        try {
-            executor.awaitTermination(1, TimeUnit.HOURS);
-        } catch (final InterruptedException e) {
-            e.printStackTrace();
-            System.exit(-2);
-        }
     }
 
     public static void main(String[] args) {
@@ -229,12 +148,10 @@ public class IndexNPL {
         parseArguments(args);
         readConfigFile(DEFAULT_PATH);
 
-        for (Path path : docsPath) {
-            if (!Files.isReadable(path)) {
-                System.out.println("Document directory '" + path.toAbsolutePath()
-                        + "' does not exist or is not readable, please check the path");
-                System.exit(1);
-            }
+        if (!Files.isReadable(docPath)) {
+            System.out.println("Document directory '" + docPath.toAbsolutePath()
+                    + "' does not exist or is not readable, please check the path");
+            System.exit(1);
         }
 
         Date start = new Date();
@@ -249,7 +166,7 @@ public class IndexNPL {
 
             IndexWriter writer = new IndexWriter(dir, iwc);
 
-            indexNonPartial(writer);
+            indexDoc(writer, docPath);
 
             try {
                 writer.commit();
