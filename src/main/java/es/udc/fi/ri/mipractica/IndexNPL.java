@@ -31,7 +31,9 @@ public class IndexNPL {
 
     static String indexPath = "index"; //default index path is a folder named index located in the root dir
     static Path docPath;
-    static String indexingmodel = "jm lambda";
+    static String indexingmodel = "jm";
+    static float lambda = 0.5f;
+    static float mu = 0.5f;
     static IndexWriterConfig.OpenMode openmode = IndexWriterConfig.OpenMode.CREATE_OR_APPEND;
 
     private IndexNPL() {
@@ -84,10 +86,22 @@ public class IndexNPL {
 
         //Read and store doc path
         String im = prop.getProperty("indexingmodel");
-        if (im.equals("jm lambda") || im.equals("dir mu") || im.equals("tfidf")) {
-            indexingmodel = im;
+        if (im != null) {
+            String[] imsplit = im.split(" ");
+            if (imsplit.length == 2){
+                indexingmodel = imsplit[0];
+                if (imsplit[0].equals("jm"))
+                    lambda = Float.parseFloat(imsplit[1]);
+                else if (imsplit[0].equals("dir"))
+                    mu = Float.parseFloat(imsplit[1]);
+                else
+                    System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
+            } else if (imsplit.length == 1 && imsplit[0].equals("tfidf"))
+                indexingmodel = imsplit[0];
+            else
+                System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
         } else {
-            System.out.println("Error reading Indexing Model, defaulting to jm lambda");
+            System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
         }
     }
 
@@ -150,10 +164,14 @@ public class IndexNPL {
             iwc.setOpenMode(openmode);
 
             switch (indexingmodel){
-                case "jm lambda": iwc.setSimilarity(new LMJelinekMercerSimilarity(0.5f));
-                case "dir mu": iwc.setSimilarity(new LMDirichletSimilarity(0.5f));
+                case "jm": iwc.setSimilarity(new LMJelinekMercerSimilarity(lambda));
+                case "dir": iwc.setSimilarity(new LMDirichletSimilarity(mu));
                 case "tfidf": iwc.setSimilarity(new ClassicSimilarity());
             }
+
+            System.out.println(indexingmodel);
+            System.out.println(lambda);
+            System.out.println(mu);
 
             IndexWriter writer = new IndexWriter(dir, iwc);
 
