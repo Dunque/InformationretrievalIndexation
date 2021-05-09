@@ -44,10 +44,12 @@ public class IndexNPL {
         String usage = "java -jar IndexNPL-0.0.1-SNAPSHOT-jar-with-dependencies"
                 + " [-index INDEX_PATH] [-openmode <APPEND | CREATE | APPEND_OR_CREATE>]\n";
 
-        if (args.length < 1)
+        if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
             System.out.println(usage);
+            System.exit(0);
+        }
 
-        for (int i = 0; i < args.length; i++) {
+            for (int i = 0; i < args.length; i++) {
             if ("-index".equals(args[i])) {
                 indexPath = args[i + 1];
                 System.out.println(args[i] + args[i + 1]);
