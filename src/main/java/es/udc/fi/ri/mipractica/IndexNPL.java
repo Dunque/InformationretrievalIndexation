@@ -34,7 +34,7 @@ public class IndexNPL {
     static String indexingmodel = "jm";
     static float lambda = 0.5f;
     static float mu = 0.5f;
-    static IndexWriterConfig.OpenMode openmode = IndexWriterConfig.OpenMode.CREATE_OR_APPEND;
+    static IndexWriterConfig.OpenMode openmode = IndexWriterConfig.OpenMode.CREATE;
 
     private IndexNPL() {
     }
@@ -97,14 +97,27 @@ public class IndexNPL {
                 else if (imsplit[0].equals("dir"))
                     mu = Float.parseFloat(imsplit[1]);
                 else
-                    System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
+                    System.out.println("Error reading Indexing Model, defaulting to tfidf");
             } else if (imsplit.length == 1 && imsplit[0].equals("tfidf"))
                 indexingmodel = imsplit[0];
             else
-                System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
+                System.out.println("Error reading Indexing Model, defaulting to tfidf");
         } else {
-            System.out.println("Error reading Indexing Model, defaulting to jm 0.5");
+            System.out.println("Error reading Indexing Model, defaulting to tfidf");
         }
+    }
+
+    public static final FieldType TYPE_STORED = new FieldType();
+
+    static final IndexOptions options = IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
+
+    static {
+        TYPE_STORED.setIndexOptions(options);
+        TYPE_STORED.setTokenized(true);
+        TYPE_STORED.setStored(true);
+        TYPE_STORED.setStoreTermVectors(true);
+        TYPE_STORED.setStoreTermVectorPositions(true);
+        TYPE_STORED.freeze();
     }
 
     static void indexDoc(IndexWriter writer, Path file) throws IOException {
@@ -123,12 +136,11 @@ public class IndexNPL {
                     while((line2 = br.readLine()) != null){
                         if (line2 == null || line2.trim().equals("/"))
                             break;
-                        contents += line2 + "\n";
+                        contents += line2 + " ";
                     }
+                    doc.add(new Field("DocIDNPL", String.valueOf(num), TYPE_STORED));
 
-                    doc.add(new StringField("DocIDNPL", String.valueOf(num), Field.Store.YES));
-
-                    doc.add(new StringField("contents", contents, Field.Store.YES));
+                    doc.add(new Field("contents", contents, TYPE_STORED));
 
                     if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
                         writer.addDocument(doc);
@@ -169,11 +181,8 @@ public class IndexNPL {
                 case "jm": iwc.setSimilarity(new LMJelinekMercerSimilarity(lambda));
                 case "dir": iwc.setSimilarity(new LMDirichletSimilarity(mu));
                 case "tfidf": iwc.setSimilarity(new ClassicSimilarity());
+                default: iwc.setSimilarity(new ClassicSimilarity());
             }
-
-            System.out.println(indexingmodel);
-            System.out.println(lambda);
-            System.out.println(mu);
 
             IndexWriter writer = new IndexWriter(dir, iwc);
 

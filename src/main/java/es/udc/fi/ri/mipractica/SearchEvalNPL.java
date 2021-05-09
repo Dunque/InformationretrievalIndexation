@@ -3,31 +3,47 @@ package es.udc.fi.ri.mipractica;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.similarities.ClassicSimilarity;
+import org.apache.lucene.search.similarities.LMDirichletSimilarity;
+import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 public class SearchEvalNPL {
 
     static String index = "index";
     static String field = "contents";
-    static String queries = null;
+    static Path queryFile = Paths.get("npl/query-text");
+    static String indexingmodel = "tfidf";
+    static float lambda = 0.5f;
+    static float mu = 0.5f;
+    static int queryMode = 0; // 0 = all | int1-int2, 1 = int
+    static String queryRange = "1-2";
+    static String queryNum = "1";
+
+    static List<String> queries = new ArrayList<>();
     static int repeat = 0;
-    static boolean raw = false;
     static String queryString = null;
     static int hitsPerPage = 10;
 
@@ -37,7 +53,9 @@ public class SearchEvalNPL {
     private static void parseArguments(String[] args) {
 
         String usage = "java -jar SearchEvalNPL-0.0.1-SNAPSHOT-jar-with-dependencies"
-                + " [-index dir] [-field f] [-repeat n] [-queries file] [-query string] [-raw] [-paging hitsPerPage]\n";
+                + " [-index dir] [-search <jm lambda | dir mu | tfidf>]"
+                + " [-repeat n] [-queries <all | int | int1-int2>]"
+                + " [-query string] [-paging hitsPerPage]\n";
 
         if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
             System.out.println(usage);
@@ -48,20 +66,35 @@ public class SearchEvalNPL {
             if ("-index".equals(args[i])) {
                 index = args[i + 1];
                 i++;
-            } else if ("-field".equals(args[i])) {
-                field = args[i + 1];
-                i++;
+            } else if ("-search".equals(args[i])) {
+                if (args[i + 1].equals("jm")) {
+                    lambda = Float.parseFloat(args[i + 2]);
+                    i += 2;
+                } else if (args[i + 1].equals("dir")) {
+                    mu = Float.parseFloat(args[i + 2]);
+                    i += 2;
+                } else if (args[i + 1].equals("tfidf")) {
+                    indexingmodel = args[i + 1];
+                    i++;
+                } else
+                    System.out.println("Error reading Indexing Model, defaulting to tfidf");
             } else if ("-queries".equals(args[i])) {
-                queries = args[i + 1];
-                i++;
-            } else if ("-query".equals(args[i])) {
-                queryString = args[i + 1];
-                i++;
+                if (args[i + 1].equals("all")) {
+                    queryMode = 0;
+                    queryRange = "1-93";
+                    i++;
+                } else if (args[i + 1].contains("-")) {
+                    queryMode = 0;
+                    queryRange = args[i + 1];
+                    i++;
+                } else {
+                    queryMode = 1;
+                    queryNum = args[i + 1];
+                    i++;
+                }
             } else if ("-repeat".equals(args[i])) {
                 repeat = Integer.parseInt(args[i + 1]);
                 i++;
-            } else if ("-raw".equals(args[i])) {
-                raw = true;
             } else if ("-paging".equals(args[i])) {
                 hitsPerPage = Integer.parseInt(args[i + 1]);
                 if (hitsPerPage <= 0) {
@@ -73,6 +106,38 @@ public class SearchEvalNPL {
         }
     }
 
+    public static String findQuery(String n) throws IOException {
+
+        try (InputStream stream = Files.newInputStream(queryFile)) {
+            String line;
+            BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            while ((line = br.readLine()) != null) {
+                if (line.equals(n))
+                    return br.readLine();
+            }
+            return null;
+        }
+    }
+
+    public static List<String> findQueries(String range) throws IOException {
+
+        List<String> result = new ArrayList<>();
+        String nums[] = range.split("-");
+
+        if (nums.length != 2) {
+            System.err.println("Query range is in an incorrect format; it must be Int1-Int2");
+            System.exit(1);
+        }
+
+        int top = Integer.parseInt(nums[0]);
+        int bot = Integer.parseInt(nums[1]);
+
+        for (int i = top; i <= bot; i++) {
+            result.add(findQuery(String.valueOf(i)));
+        }
+        return result;
+    }
+
     public static void main(String[] args) throws Exception {
 
         parseArguments(args);
@@ -81,61 +146,41 @@ public class SearchEvalNPL {
         IndexSearcher searcher = new IndexSearcher(reader);
         Analyzer analyzer = new StandardAnalyzer();
 
-        BufferedReader in = null;
-        if (queries != null) {
-            in = Files.newBufferedReader(Paths.get(queries), StandardCharsets.UTF_8);
-        } else {
-            in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        switch (indexingmodel) {
+            case "jm":
+                searcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
+            case "dir":
+                searcher.setSimilarity(new LMDirichletSimilarity(mu));
+            case "tfidf":
+                searcher.setSimilarity(new ClassicSimilarity());
+            default:
+                searcher.setSimilarity(new ClassicSimilarity());
         }
+
+        //BufferedReader in = null;
+
+        switch (queryMode) {
+            case 0:
+                queries.addAll(findQueries(queryRange));
+            case 1:
+                queries.add(findQuery(queryNum));
+        }
+
         QueryParser parser = new QueryParser(field, analyzer);
-        while (true) {
-            if (queries == null && queryString == null) { // prompt the user
-                System.out.println("Enter query: ");
-            }
 
-            String line = queryString != null ? queryString : in.readLine();
 
-            if (line == null || line.length() == -1) {
-                break;
-            }
-
+        for (String line : queries) {
             line = line.trim();
-            if (line.length() == 0) {
-                break;
-            }
-
             Query query = parser.parse(line);
             System.out.println("Searching for: " + query.toString(field));
-
-            if (repeat > 0) { // repeat & time as benchmark
-                Date start = new Date();
-                for (int i = 0; i < repeat; i++) {
-                    searcher.search(query, 100);
-                }
-                Date end = new Date();
-                System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
-            }
-
-            doPagingSearch(in, searcher, query, hitsPerPage, raw, queries == null && queryString == null);
-
-            if (queryString != null) {
-                break;
-            }
+            doPagingSearch(searcher, query, hitsPerPage);
         }
+
+
         reader.close();
     }
 
-    /**
-     * This demonstrates a typical paging search scenario, where the search engine
-     * presents pages of size n to the user. The user can then go to the next page
-     * if interested in the next hits.
-     * <p>
-     * When the query is executed for the first time, then only enough results are
-     * collected to fill 5 result pages. If the user wants to page beyond this
-     * limit, then the query is executed another time and all hits are collected.
-     */
-    public static void doPagingSearch(BufferedReader in, IndexSearcher searcher, Query query, int hitsPerPage,
-                                      boolean raw, boolean interactive) throws IOException {
+    public static void doPagingSearch(IndexSearcher searcher, Query query, int hitsPerPage) throws IOException {
 
         // Collect enough docs to show 5 pages
         TopDocs results = searcher.search(query, 5 * hitsPerPage);
@@ -147,84 +192,18 @@ public class SearchEvalNPL {
         int start = 0;
         int end = Math.min(numTotalHits, hitsPerPage);
 
-        while (true) {
-            if (end > hits.length) {
-                System.out.println("Only results 1 - " + hits.length + " of " + numTotalHits
-                        + " total matching documents collected.");
-                System.out.println("Collect more (y/n) ?");
-                String line = in.readLine();
-                if (line.length() == 0 || line.charAt(0) == 'n') {
-                    break;
-                }
+        for (int i = start; i < end; i++) {
 
-                hits = searcher.search(query, numTotalHits).scoreDocs;
+            Document doc = searcher.doc(hits[i].doc);
+            String id = doc.get("DocIDNPL");
+            if (id != null) {
+                System.out.println((i + 1) + ". Doc ID: " + id + " score = " + hits[i].score);
+            } else {
+                System.out.println((i + 1) + ". " + "No id for this document");
             }
 
-            end = Math.min(hits.length, start + hitsPerPage);
-
-            for (int i = start; i < end; i++) {
-                if (raw) { // output raw format
-                    System.out.println("doc=" + hits[i].doc + " score=" + hits[i].score);
-                    continue;
-                }
-
-                Document doc = searcher.doc(hits[i].doc);
-                String path = doc.get("path");
-                if (path != null) {
-                    System.out.println((i + 1) + ". " + path);
-                    String title = doc.get("title");
-                    if (title != null) {
-                        System.out.println("   Title: " + doc.get("title"));
-                    }
-                } else {
-                    System.out.println((i + 1) + ". " + "No path for this document");
-                }
-
-            }
-
-            if (!interactive || end == 0) {
-                break;
-            }
-
-            if (numTotalHits >= end) {
-                boolean quit = false;
-                while (true) {
-                    System.out.print("Press ");
-                    if (start - hitsPerPage >= 0) {
-                        System.out.print("(p)revious page, ");
-                    }
-                    if (start + hitsPerPage < numTotalHits) {
-                        System.out.print("(n)ext page, ");
-                    }
-                    System.out.println("(q)uit or enter number to jump to a page.");
-
-                    String line = in.readLine();
-                    if (line.length() == 0 || line.charAt(0) == 'q') {
-                        quit = true;
-                        break;
-                    }
-                    if (line.charAt(0) == 'p') {
-                        start = Math.max(0, start - hitsPerPage);
-                        break;
-                    } else if (line.charAt(0) == 'n') {
-                        if (start + hitsPerPage < numTotalHits) {
-                            start += hitsPerPage;
-                        }
-                        break;
-                    } else {
-                        int page = Integer.parseInt(line);
-                        if ((page - 1) * hitsPerPage < numTotalHits) {
-                            start = (page - 1) * hitsPerPage;
-                            break;
-                        } else {
-                            System.out.println("No such page");
-                        }
-                    }
-                }
-                if (quit)
-                    break;
-                end = Math.min(numTotalHits, start + hitsPerPage);
-            }
         }
+
+
     }
 }
