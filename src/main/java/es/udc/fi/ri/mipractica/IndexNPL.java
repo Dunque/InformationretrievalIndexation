@@ -49,7 +49,7 @@ public class IndexNPL {
             System.exit(0);
         }
 
-            for (int i = 0; i < args.length; i++) {
+        for (int i = 0; i < args.length; i++) {
             if ("-index".equals(args[i])) {
                 indexPath = args[i + 1];
                 System.out.println(args[i] + args[i + 1]);
@@ -90,7 +90,7 @@ public class IndexNPL {
         String im = prop.getProperty("indexingmodel");
         if (im != null) {
             String[] imsplit = im.split(" ");
-            if (imsplit.length == 2){
+            if (imsplit.length == 2) {
                 indexingmodel = imsplit[0];
                 if (imsplit[0].equals("jm"))
                     lambda = Float.parseFloat(imsplit[1]);
@@ -125,7 +125,7 @@ public class IndexNPL {
         try (InputStream stream = Files.newInputStream(file)) {
             String line;
             BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-            while ((line = br.readLine()) != null){
+            while ((line = br.readLine()) != null) {
                 int num;
                 try {
                     num = Integer.parseInt(line);
@@ -133,7 +133,7 @@ public class IndexNPL {
                     Document doc = new Document();
 
                     String line2;
-                    while((line2 = br.readLine()) != null){
+                    while ((line2 = br.readLine()) != null) {
                         if (line2 == null || line2.trim().equals("/"))
                             break;
                         contents += line2 + " ";
@@ -147,9 +147,7 @@ public class IndexNPL {
                     } else {
                         writer.updateDocument(new Term("path", file.toString()), doc);
                     }
-                }
-                catch (NumberFormatException e)
-                {
+                } catch (NumberFormatException e) {
                 }
             }
         }
@@ -177,11 +175,19 @@ public class IndexNPL {
 
             iwc.setOpenMode(openmode);
 
-            switch (indexingmodel){
-                case "jm": iwc.setSimilarity(new LMJelinekMercerSimilarity(lambda));
-                case "dir": iwc.setSimilarity(new LMDirichletSimilarity(mu));
-                case "tfidf": iwc.setSimilarity(new ClassicSimilarity());
-                default: iwc.setSimilarity(new ClassicSimilarity());
+            switch (indexingmodel) {
+                case "jm":
+                    iwc.setSimilarity(new LMJelinekMercerSimilarity(lambda));
+                    break;
+                case "dir":
+                    iwc.setSimilarity(new LMDirichletSimilarity(mu));
+                    break;
+                case "tfidf":
+                    iwc.setSimilarity(new ClassicSimilarity());
+                    break;
+                default:
+                    iwc.setSimilarity(new ClassicSimilarity());
+                    break;
             }
 
             IndexWriter writer = new IndexWriter(dir, iwc);

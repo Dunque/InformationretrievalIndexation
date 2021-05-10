@@ -3,11 +3,8 @@ package es.udc.fi.ri.mipractica;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -26,15 +23,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 public class SearchEvalNPL {
 
+    static final String ALL_QUERIES = "1-93";
+    static final Path QUERIES_PATH = Paths.get("npl/query-text");
+    static final Path RELEVANCE_PATH = Paths.get("npl/rlv-ass");
+
     static String index = "index";
     static String field = "contents";
-    static Path queryFile = Paths.get("npl/query-text");
+    static Path queryFile = QUERIES_PATH;
     static String indexingmodel = "tfidf";
     static float lambda = 0.5f;
     static float mu = 0.5f;
@@ -42,10 +41,10 @@ public class SearchEvalNPL {
     static String queryRange = "1-2";
     static String queryNum = "1";
 
-    static List<String> queries = new ArrayList<>();
-    static int repeat = 0;
-    static String queryString = null;
-    static int hitsPerPage = 10;
+    static HashMap<Integer, String> queries = new HashMap<>();
+    static int cut = 10;
+    static int top = 10;
+    static int metrica = 0; //0 = P, 1 = R, 2 = MAP
 
     private SearchEvalNPL() {
     }
@@ -54,8 +53,8 @@ public class SearchEvalNPL {
 
         String usage = "java -jar SearchEvalNPL-0.0.1-SNAPSHOT-jar-with-dependencies"
                 + " [-index dir] [-search <jm lambda | dir mu | tfidf>]"
-                + " [-repeat n] [-queries <all | int | int1-int2>]"
-                + " [-query string] [-paging hitsPerPage]\n";
+                + " [-cut n] [-metrica <P | R | MAP>] [-top m]"
+                + " [-queries <all | int | int1-int2>]\n";
 
         if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
             System.out.println(usage);
@@ -81,7 +80,7 @@ public class SearchEvalNPL {
             } else if ("-queries".equals(args[i])) {
                 if (args[i + 1].equals("all")) {
                     queryMode = 0;
-                    queryRange = "1-93";
+                    queryRange = ALL_QUERIES;
                     i++;
                 } else if (args[i + 1].contains("-")) {
                     queryMode = 0;
@@ -92,12 +91,28 @@ public class SearchEvalNPL {
                     queryNum = args[i + 1];
                     i++;
                 }
-            } else if ("-repeat".equals(args[i])) {
-                repeat = Integer.parseInt(args[i + 1]);
+            } else if ("-metrica".equals(args[i])) {
+                if (args[i + 1].equals("P")) {
+                    metrica = 0;
+                    i++;
+                } else if (args[i + 1].equals("R")) {
+                    metrica = 1;
+                    i++;
+                } else if (args[i + 1].equals("MAP")) {
+                    metrica = 2;
+                    i++;
+                } else
+                    System.out.println("Error, metric not recognized, defaulting to P");
+            } else if ("-top".equals(args[i])) {
+                top = Integer.parseInt(args[i + 1]);
+                if (top <= 0) {
+                    System.err.println("There must be at least 1 hit per page.");
+                    System.exit(1);
+                }
                 i++;
-            } else if ("-paging".equals(args[i])) {
-                hitsPerPage = Integer.parseInt(args[i + 1]);
-                if (hitsPerPage <= 0) {
+            } else if ("-cut".equals(args[i])) {
+                cut = Integer.parseInt(args[i + 1]);
+                if (cut <= 0) {
                     System.err.println("There must be at least 1 hit per page.");
                     System.exit(1);
                 }
@@ -106,22 +121,26 @@ public class SearchEvalNPL {
         }
     }
 
-    public static String findQuery(String n) throws IOException {
-
+    public static HashMap<Integer, String> findQuery(String n) throws IOException {
         try (InputStream stream = Files.newInputStream(queryFile)) {
             String line;
+            HashMap<Integer, String> result = new HashMap<>();
             BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
             while ((line = br.readLine()) != null) {
-                if (line.equals(n))
-                    return br.readLine();
+                if (line.equals(n)){
+                    result.put(Integer.parseInt(n), br.readLine());
+                    break;
+                }
             }
-            return null;
+            br.close();
+            stream.close();
+            return result;
         }
     }
 
-    public static List<String> findQueries(String range) throws IOException {
+    public static HashMap<Integer, String> findQueries(String range) throws IOException {
 
-        List<String> result = new ArrayList<>();
+        HashMap<Integer, String> result = new HashMap<>();
         String nums[] = range.split("-");
 
         if (nums.length != 2) {
@@ -133,7 +152,10 @@ public class SearchEvalNPL {
         int bot = Integer.parseInt(nums[1]);
 
         for (int i = top; i <= bot; i++) {
-            result.add(findQuery(String.valueOf(i)));
+            System.out.println(i);
+            System.out.println(findQuery(String.valueOf(i)));
+            result.putAll(findQuery(String.valueOf(i)));
+            System.out.println("tamaño del hash a añadir = " + result.size());
         }
         return result;
     }
@@ -149,61 +171,139 @@ public class SearchEvalNPL {
         switch (indexingmodel) {
             case "jm":
                 searcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
+                break;
             case "dir":
                 searcher.setSimilarity(new LMDirichletSimilarity(mu));
+                break;
             case "tfidf":
                 searcher.setSimilarity(new ClassicSimilarity());
+                break;
             default:
                 searcher.setSimilarity(new ClassicSimilarity());
+                break;
         }
 
-        //BufferedReader in = null;
-
         switch (queryMode) {
-            case 0:
-                queries.addAll(findQueries(queryRange));
-            case 1:
-                queries.add(findQuery(queryNum));
+            case 0: {
+                queries.putAll(findQueries(queryRange));
+                break;
+            }
+            case 1: {
+                queries.putAll(findQuery(queryNum));
+                break;
+            }
         }
 
         QueryParser parser = new QueryParser(field, analyzer);
 
-
-        for (String line : queries) {
+        for (Map.Entry<Integer, String> entry : queries.entrySet()) {
+            int num = entry.getKey();
+            String line = entry.getValue();
             line = line.trim();
             Query query = parser.parse(line);
             System.out.println("Searching for: " + query.toString(field));
-            doPagingSearch(searcher, query, hitsPerPage);
+            doPagingSearch(searcher, query, num);
         }
-
 
         reader.close();
     }
 
-    public static void doPagingSearch(IndexSearcher searcher, Query query, int hitsPerPage) throws IOException {
+    public static List<Integer> findRelevantDocs(Path file, int query) throws IOException {
 
-        // Collect enough docs to show 5 pages
-        TopDocs results = searcher.search(query, 5 * hitsPerPage);
+        List<Integer> result = new ArrayList<>();
+        try (InputStream stream = Files.newInputStream(file)) {
+            String line;
+            BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            while ((line = br.readLine()) != null) {
+                try {
+                    int num = Integer.parseInt(line);
+
+                    if (num == query) {
+                        String line2;
+                        String[] aux;
+                        while ((line2 = br.readLine()) != null) {
+                            if (line2 == null || line2.trim().equals("/"))
+                                break;
+                            aux = line2.split("\\s+");
+                            for (String str : aux) {
+                                int num2;
+                                try {
+                                    num2 = Integer.parseInt(str);
+                                    result.add(num2);
+                                } catch (NumberFormatException e) {
+                                }
+                            }
+                        }
+                    }
+                } catch (NumberFormatException e) {
+                }
+            }
+            return result;
+        }
+    }
+
+    public static void doPagingSearch(IndexSearcher searcher, Query query, int num) throws IOException {
+
+        TopDocs results = searcher.search(query, cut);
         ScoreDoc[] hits = results.scoreDocs;
+        List<Integer> relevantDocs = findRelevantDocs(RELEVANCE_PATH, num);
+        Set<Integer> relevantSet = new HashSet<>();
+
+        List<Float> accumPrecision = new ArrayList<>();
+
+        System.out.println("RELEVANT DOCS = " + relevantDocs.toString());
 
         int numTotalHits = Math.toIntExact(results.totalHits.value);
         System.out.println(numTotalHits + " total matching documents");
 
-        int start = 0;
-        int end = Math.min(numTotalHits, hitsPerPage);
-
-        for (int i = start; i < end; i++) {
-
+        //this loop is used for calculating the metrics
+        int end = Math.min(numTotalHits, cut);
+        int n = 1;
+        for (int i = 0; i < end; i++) {
             Document doc = searcher.doc(hits[i].doc);
-            String id = doc.get("DocIDNPL");
-            if (id != null) {
-                System.out.println((i + 1) + ". Doc ID: " + id + " score = " + hits[i].score);
-            } else {
-                System.out.println((i + 1) + ". " + "No id for this document");
+            int id = Integer.parseInt(doc.get("DocIDNPL"));
+            for (int idaux : relevantDocs) {
+                if (id == idaux) {
+                    relevantSet.add(id);
+                    float prec = (float) relevantSet.size() / n;
+                    accumPrecision.add(prec);
+                }
             }
-
+            n++;
         }
 
+        //this is the printing loop, it displays the top TOP hit documents
+        end = Math.min(numTotalHits, top);
+        for (int i = 0; i < end; i++) {
+            Document doc = searcher.doc(hits[i].doc);
+            int id = Integer.parseInt(doc.get("DocIDNPL"));
+            System.out.println((i + 1) + ". Doc ID: " + id + " score = " + hits[i].score);
+        }
 
+        switch (metrica) {
+            case 0:
+                System.out.println("Precision at " + cut + " = " + (float) relevantSet.size() / cut);
+                break;
+
+            case 1:
+                System.out.println("Recall at " + cut + " = " + (float) relevantSet.size() / relevantDocs.size());
+                break;
+
+            case 2: {
+                if (relevantSet.size() != 0) {
+                    float sum = 0;
+                    for (Float d : accumPrecision)
+                        sum += d;
+                    System.out.println("Mean Average Precision at " + cut + " = " + (float) sum / relevantSet.size());
+                } else
+                    System.out.println("Can't compute Mean Average Precision at " + cut + ", no relevant documents found");
+                break;
+            }
+
+            default:
+                System.out.println("Precision at " + cut + " = " + (float) relevantSet.size() / cut);
+                break;
+        }
+        System.out.println("\n");
     }
 }
