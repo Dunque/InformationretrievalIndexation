@@ -67,9 +67,11 @@ public class SearchEvalNPL {
                 i++;
             } else if ("-search".equals(args[i])) {
                 if (args[i + 1].equals("jm")) {
+                    indexingmodel = args[i + 1];
                     lambda = Float.parseFloat(args[i + 2]);
                     i += 2;
                 } else if (args[i + 1].equals("dir")) {
+                    indexingmodel = args[i + 1];
                     mu = Float.parseFloat(args[i + 2]);
                     i += 2;
                 } else if (args[i + 1].equals("tfidf")) {
