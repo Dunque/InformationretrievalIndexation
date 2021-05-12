@@ -28,8 +28,8 @@ import java.util.*;
 public class SearchEvalNPL {
 
     static final String ALL_QUERIES = "1-93";
-    static final Path QUERIES_PATH = Paths.get("npl/query-text");
-    static final Path RELEVANCE_PATH = Paths.get("npl/rlv-ass");
+    static final Path QUERIES_PATH = Paths.get("/home/anton/Desktop/RI/p2/InformationretrievalIndexation/npl/query-text");
+    static final Path RELEVANCE_PATH = Paths.get("/home/anton/Desktop/RI/p2/InformationretrievalIndexation/npl/rlv-ass");
 
     static String index = "index";
     static String field = "contents";
@@ -243,7 +243,6 @@ public class SearchEvalNPL {
     }
 
     public static void doPagingSearch(IndexSearcher searcher, Query query, int num) throws IOException {
-
         TopDocs results = searcher.search(query, cut);
         ScoreDoc[] hits = results.scoreDocs;
         List<Integer> relevantDocs = findRelevantDocs(RELEVANCE_PATH, num);
