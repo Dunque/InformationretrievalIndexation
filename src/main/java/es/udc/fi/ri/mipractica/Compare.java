@@ -4,6 +4,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.*;
 import org.apache.commons.math3.stat.inference.TTest;
+import org.apache.commons.math3.stat.inference.WilcoxonSignedRankTest;
+import org.apache.commons.math3.stat.ranking.NaNStrategy;
+import org.apache.commons.math3.stat.ranking.TiesStrategy;
 import java.lang.Double;
 
 public class Compare {
@@ -51,28 +54,23 @@ public class Compare {
         }
 	}
 	
-	private static void doTTest(Scanner sc1, Scanner sc2) {
-		List<Double> lst1 = new ArrayList<Double>();
-		List<Double> lst2 = new ArrayList<Double>();
-		
-		while (sc1.hasNextLine()) {
-			String[] linesc1 = sc1.nextLine().split(" ");
-			double sample1 = Double.parseDouble(linesc1[linesc1.length-1]);
-			lst1.add(sample1);
+	private static double[] getArray(Scanner scanner) {
+		List<Double> lst = new ArrayList<Double>();
+		while (scanner.hasNextLine()) {
+			String[] line = scanner.nextLine().split(" ");
+			double sample = Double.parseDouble(line[line.length-1]);
+			lst.add(sample);
 		}
-		while (sc2.hasNextLine()) {
-			String[] linesc2 = sc2.nextLine().split(" ");
-			double sample2 = Double.parseDouble(linesc2[linesc2.length-1]);
-			lst2.add(sample2);
-		}
-		double[] samples1=new double[lst1.size()];
-		double[] samples2=new double[lst2.size()];
+		double[] samples=new double[lst.size()];
 		int index = 0;
-		for(final Double value:lst1)
-			samples1[index++]=value;
-		index=0;
-		for(final Double value:lst2)
-			samples2[index++]=value;
+		for(final Double value:lst)
+			samples[index++]=value;
+		return samples;
+	}
+	
+	private static void doTTest(Scanner sc1, Scanner sc2) {
+		double[] samples1=getArray(sc1);
+		double[] samples2=getArray(sc2);
 		TTest tTest = new TTest();
 		double pvalue = tTest.pairedTTest(samples1,samples2);
 		boolean result = tTest.pairedTTest(samples1,samples2, alpha);
@@ -80,14 +78,26 @@ public class Compare {
 		System.out.println("Results for t-test");
 		System.out.println("Result\tP-value");
 		System.out.print("------\t");
-		for(int i = 0; i< div[1].length()+2;i++)
+		int max = Math.max(div[0].length()+div[1].length()+1,7);
+		for(int i = 0; i< max;i++)
 			System.out.print("-");
 		System.out.println();
 		System.out.println(result+"\t"+pvalue);
 	}
 	
 	private static void doWTest(Scanner sc1, Scanner sc2) {
-		
+		double[] samples1=getArray(sc1);
+		double[] samples2=getArray(sc2);
+		WilcoxonSignedRankTest wTest = new WilcoxonSignedRankTest(NaNStrategy.FIXED,TiesStrategy.AVERAGE);
+		double pvalue = wTest.wilcoxonSignedRankTest(samples1,samples2,false);
+		String[] div = String.valueOf(pvalue).split("\\.");
+		System.out.println("Results for Wilcoxon signed-rank test");
+		System.out.println("P-value");
+		int max = Math.max(div[0].length()+div[1].length()+1,7);
+		for(int i = 0; i< max;i++)
+			System.out.print("-");
+		System.out.println();
+		System.out.println(pvalue);
 	}
 	
     public static void main( String[] args )
