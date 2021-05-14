@@ -14,6 +14,7 @@ import org.apache.lucene.search.similarities.ClassicSimilarity;
 import org.apache.lucene.search.similarities.LMDirichletSimilarity;
 import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.index.IndexableField;
 
 import java.io.BufferedReader;
 import java.io.IOException;
