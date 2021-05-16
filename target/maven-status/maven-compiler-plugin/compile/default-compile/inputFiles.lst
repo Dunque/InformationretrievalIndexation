@@ -1,6 +1,6 @@
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/TrainingTestNPL.java
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/IndexNPL.java
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/App.java
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/Compare.java
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/SearchEvalNPL.java
-/home/anton/Desktop/RI/p2/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/AutomaticRelevanceFeedback.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/SearchEvalNPL.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/ManualRelevanceFeedbackNPL.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/IndexNPL.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/App.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/TrainingTestNPL.java
+/home/anton/Desktop/RI/p3/InformationretrievalIndexation/src/main/java/es/udc/fi/ri/mipractica/Compare.java

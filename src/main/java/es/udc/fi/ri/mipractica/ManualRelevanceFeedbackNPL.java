@@ -34,6 +34,7 @@ public class ManualRelevanceFeedbackNPL {
 	static String residual = "T";
 	static String queryNum = "1";
 	static HashMap<Integer, String> queries = new HashMap<>();
+	static HashMap<Integer, String> queriesAux = new HashMap<>();
 	static String indexingmodel = "tfidf";
 	static float lambda = 0.5f;
     static float mu = 0.5f;
@@ -41,6 +42,8 @@ public class ManualRelevanceFeedbackNPL {
     static final Path QUERIES_PATH = Paths.get("/home/anton/Desktop/RI/p2/InformationretrievalIndexation/npl/query-text");
     static final Path RELEVANCE_PATH = Paths.get("/home/anton/Desktop/RI/p2/InformationretrievalIndexation/npl/rlv-ass");
     static Path queryFile = QUERIES_PATH;
+    static int answer = 3;
+    static ArrayList<String> newQueries = new ArrayList<>();
     
 	private static void parseArguments(String[] args) {
 		
@@ -128,8 +131,9 @@ public class ManualRelevanceFeedbackNPL {
     	IndexReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(index)));
         IndexSearcher searcher = new IndexSearcher(reader);
         Analyzer analyzer = new StandardAnalyzer();
-        
-        switch (indexingmodel) {
+        boolean repeat = true;
+        while(repeat) {
+        	switch (indexingmodel) {
         	case "jm":
         		searcher.setSimilarity(new LMJelinekMercerSimilarity(lambda));
         		break;
@@ -142,19 +146,63 @@ public class ManualRelevanceFeedbackNPL {
         	default:
         		searcher.setSimilarity(new ClassicSimilarity());
         		break;
-        }
-        
-        queries.putAll(findQuery(queryNum));
-        
-        QueryParser parser = new QueryParser(field, analyzer);
-        for (Map.Entry<Integer, String> entry : queries.entrySet()) {
-        	int num = entry.getKey();
-            String line = entry.getValue();
-            line = line.trim();
-            Query query = parser.parse(line);
-            System.out.println("Searching for: " + query.toString(field));
-            doPagingSearch(searcher, query, num);
-        }
+        	}
+	        
+        	if(answer!=1)
+        		queries.putAll(findQuery(queryNum));
+        	else {
+        		String finalQuery="";
+        		for(int i : queries.keySet())
+        			finalQuery = queries.get(i);
+        		finalQuery=finalQuery+" ";
+        		for(String s:newQueries) {
+        			queriesAux.putAll(findQuery(s));
+        			for(Integer i : queriesAux.keySet()) {
+        				finalQuery=finalQuery+" "+queriesAux.get(i);
+        			}
+        			queriesAux.clear();
+        		}
+        		queries.clear();
+        		queries.put(0,finalQuery);
+        	}
+	        
+	        QueryParser parser = new QueryParser(field, analyzer);
+	        for (Map.Entry<Integer, String> entry : queries.entrySet()) {
+	        	int num = entry.getKey();
+	            String line = entry.getValue();
+	            line = line.trim();
+	            Query query = parser.parse(line);
+	            System.out.println("Searching for: " + query.toString(field));
+	            doPagingSearch(searcher, query, num);
+	        }
+	        System.out.println();
+	        System.out.println("Expand query:1  Modify query:2  Quit:3");
+	        Scanner sc=new Scanner(System.in);  
+	        answer= sc.nextInt();
+	        int newquery = 0;
+	        String origquery = "";
+	        switch (answer) {
+        	case 1:
+        		System.out.println("Enter query number: ");
+        		newquery= sc.nextInt();
+        		for(int i : queries.keySet())
+        			origquery = queries.get(i);
+        		//queries.clear();
+        		queryNum=Integer.toString(newquery);
+        		newQueries.add(queryNum);
+        		break;
+        	case 2:
+        		System.out.println("Enter query number: ");
+        		newquery= sc.nextInt();
+        		for(int i : queries.keySet())
+        			origquery = queries.get(i);
+        		queries.clear();
+        		queryNum=Integer.toString(newquery);
+        		newQueries.clear();
+        		break;
+        	default:repeat = false; break;
+        	}
+        }        
         
     }
     
