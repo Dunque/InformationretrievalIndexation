@@ -14,7 +14,6 @@ import org.apache.lucene.search.similarities.ClassicSimilarity;
 import org.apache.lucene.search.similarities.LMDirichletSimilarity;
 import org.apache.lucene.search.similarities.LMJelinekMercerSimilarity;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.index.IndexableField;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -46,6 +45,9 @@ public class SearchEvalNPL {
     static int cut = 10;
     static int top = 10;
     static int metrica = 0; //0 = P, 1 = R, 2 = MAP
+
+    static List<Float> metrics = new ArrayList<>();
+    static int queryCount;
 
     private SearchEvalNPL() {
     }
@@ -155,10 +157,7 @@ public class SearchEvalNPL {
         int bot = Integer.parseInt(nums[1]);
 
         for (int i = top; i <= bot; i++) {
-            System.out.println(i);
-            System.out.println(findQuery(String.valueOf(i)));
             result.putAll(findQuery(String.valueOf(i)));
-            System.out.println("tamaño del hash a añadir = " + result.size());
         }
         return result;
     }
@@ -207,6 +206,11 @@ public class SearchEvalNPL {
             System.out.println("Searching for: " + query.toString(field));
             doPagingSearch(searcher, query, num);
         }
+        float sum = 0;
+        for (Float d : metrics)
+            sum += d;
+        System.out.println("Mean of the metric for all the queries = " + (float) sum / queryCount);
+
 
         reader.close();
     }
@@ -254,7 +258,7 @@ public class SearchEvalNPL {
         List<Float> accumPrecision = new ArrayList<>();
 
         System.out.println("RELEVANT DOCS = " + relevantDocs.toString());
-
+        System.out.println();
         int numTotalHits = Math.toIntExact(results.totalHits.value);
         System.out.println(numTotalHits + " total matching documents");
 
@@ -281,14 +285,16 @@ public class SearchEvalNPL {
             int id = Integer.parseInt(doc.get("DocIDNPL"));
             System.out.println((i + 1) + ". Doc ID: " + id + " score = " + hits[i].score);
         }
-
+        System.out.println();
         switch (metrica) {
             case 0:
                 System.out.println("Precision at " + cut + " = " + (float) relevantSet.size() / cut);
+                metrics.add((float) relevantSet.size() / cut);
                 break;
 
             case 1:
                 System.out.println("Recall at " + cut + " = " + (float) relevantSet.size() / relevantDocs.size());
+                metrics.add((float) relevantSet.size() / relevantDocs.size());
                 break;
 
             case 2: {
@@ -297,6 +303,7 @@ public class SearchEvalNPL {
                     for (Float d : accumPrecision)
                         sum += d;
                     System.out.println("Mean Average Precision at " + cut + " = " + (float) sum / relevantSet.size());
+                    metrics.add((float) sum / relevantSet.size());
                 } else
                     System.out.println("Can't compute Mean Average Precision at " + cut + ", no relevant documents found");
                 break;
@@ -306,6 +313,7 @@ public class SearchEvalNPL {
                 System.out.println("Precision at " + cut + " = " + (float) relevantSet.size() / cut);
                 break;
         }
-        System.out.println("\n");
+        System.out.println();
+        queryCount++;
     }
 }
