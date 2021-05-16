@@ -170,7 +170,7 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>AutomaticRelevanceFeedback</id>
+                        <id>ManualRelevanceFeedbackNPL</id>
                         <phase>package</phase>
                         <goals>
                             <goal>single</goal>
@@ -181,10 +181,10 @@
                             </descriptorRefs>
                             <archive>
                                 <manifest>
-                                    <mainClass>es.udc.fi.ri.mipractica.AutomaticRelevanceFeedback</mainClass>
+                                    <mainClass>es.udc.fi.ri.mipractica.ManualRelevanceFeedbackNPL</mainClass>
                                 </manifest>
                             </archive>
-                            <finalName>AutomaticRelevanceFeedback-${project.version}</finalName>
+                            <finalName>ManualRelevanceFeedbackNPL-${project.version}</finalName>
                         </configuration>
                     </execution>
                 </executions>
